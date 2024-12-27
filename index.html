@@ -2,10 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>AI Voice Prompt (Continuous Listening)</title>
+    <title>AI Voice Prompt (Continuous + Editable)</title>
   </head>
   <body>
-    <h1>Ask AI with Continuous Voice Input</h1>
+    <h1>Ask AI with Continuous Voice Input (Editable)</h1>
 
     <!-- Start and Stop buttons for continuous listening -->
     <button id="start-recording">Start Recording</button>
@@ -13,16 +13,21 @@
 
     <!-- Display recognized speech so far -->
     <p>
-      <strong>Question (Continuously Updated):</strong>
+      <strong>Question (Continuously Updated):</strong><br />
       <span id="recognized-text">Waiting for speech...</span>
     </p>
 
+    <!-- Button to edit the text -->
+    <button id="edit-text">Edit Text</button>
+    <!-- Button to save the edit (done editing) -->
+    <button id="save-edit" style="display: none">Done Editing</button>
+
     <!-- Button to send question to AI -->
-    <button id="ask-ai">Ask AI</button>
+    <button id="ask-ai" disabled>Ask AI</button>
 
     <!-- Display AI answer -->
     <p>
-      <strong>AI Answer:</strong>
+      <strong>AI Answer:</strong><br />
       <span id="ai-answer"></span>
     </p>
 
@@ -34,47 +39,40 @@
 
       // Make it continuous so it doesn't stop after a single phrase
       recognition.continuous = true
-      // Decide whether to show partial results (we'll keep them off for now)
+      // No partial results for simplicity
       recognition.interimResults = false
       recognition.maxAlternatives = 1
 
-      // We'll store the full recognized text here
-      let userQuestion = ''
-      let isListening = false
+      let userQuestion = '' // Will store the recognized text
+      let isListening = false // To track if we are in continuous mode
+      let editing = false // To track if we are currently editing
 
-      // Triggered when speech recognition starts
+      const recognizedTextElem = document.getElementById('recognized-text')
+      const editTextButton = document.getElementById('edit-text')
+      const saveEditButton = document.getElementById('save-edit')
+      const askAIButton = document.getElementById('ask-ai')
+
+      // --------------- Speech Recognition Callbacks ---------------
+
       recognition.onstart = function () {
         console.log('Speech recognition started...')
-        document.getElementById('recognized-text').textContent = 'Listening...'
+        recognizedTextElem.textContent = 'Listening...'
       }
 
-      // Triggered when new speech is recognized (continuous mode can fire onresult multiple times)
       recognition.onresult = function (event) {
-        // The result index is event.resultIndex; in continuous mode, results can accumulate
-        // We append each new recognized phrase to our userQuestion
         const lastResultIndex = event.results.length - 1
         const transcript = event.results[lastResultIndex][0].transcript
-
-        // Append the new text with a space
+        // Append each new recognized phrase
         userQuestion += transcript + ' '
-        document.getElementById('recognized-text').textContent = userQuestion
+        recognizedTextElem.textContent = userQuestion
         console.log('Speech recognized:', transcript)
       }
 
-      // If an error occurs
       recognition.onerror = function (event) {
         console.log('Speech recognition error:', event.error)
-        if (event.error === 'not-allowed') {
-          document.getElementById('recognized-text').textContent =
-            'Microphone access not allowed.'
-        } else {
-          document.getElementById('recognized-text').textContent =
-            'Error capturing speech.'
-        }
+        recognizedTextElem.textContent = 'Error capturing speech.'
       }
 
-      // Called when the recognition service ends. In continuous mode, this can happen if silence is detected.
-      // We'll auto-restart if we're still in "listening" mode, so it keeps going indefinitely until user stops.
       recognition.onend = function () {
         console.log('Speech recognition ended.')
         if (isListening) {
@@ -83,18 +81,22 @@
         }
       }
 
-      // Start recording (continuous)
+      // ---------------- Buttons ----------------
+
+      // 1) Start Recording (continuous)
       document
         .getElementById('start-recording')
         .addEventListener('click', () => {
           if (!isListening) {
             isListening = true
-            userQuestion = '' // Reset on new start
+            editing = false
+            userQuestion = '' // reset on new start
+            recognizedTextElem.textContent = 'Listening...'
             recognition.start()
           }
         })
 
-      // Stop recording
+      // 2) Stop Recording
       document
         .getElementById('stop-recording')
         .addEventListener('click', () => {
@@ -102,13 +104,43 @@
             isListening = false
             recognition.stop()
             console.log('Stopped continuous listening.')
+            // Once we stop, we can enable editing or direct ask
+            askAIButton.disabled = false
           }
         })
 
-      // Ask AI: send the question to the backend
-      document.getElementById('ask-ai').addEventListener('click', async () => {
+      // 3) Edit Text
+      editTextButton.addEventListener('click', () => {
+        if (!editing) {
+          editing = true
+          // Turn recognized text into an editable text area
+          const currentText = recognizedTextElem.textContent
+          recognizedTextElem.innerHTML = `
+          <textarea id="edit-area" rows="5" cols="50">${currentText.trim()}</textarea>
+        `
+          saveEditButton.style.display = 'inline-block'
+          askAIButton.disabled = true // disable asking until done editing
+        }
+      })
+
+      // 4) Save Edit / Done Editing
+      saveEditButton.addEventListener('click', () => {
+        if (editing) {
+          const editArea = document.getElementById('edit-area')
+          const editedText = editArea.value.trim()
+          userQuestion = editedText
+          recognizedTextElem.textContent = editedText
+          editing = false
+          saveEditButton.style.display = 'none'
+          askAIButton.disabled = false // re-enable ask AI
+        }
+      })
+
+      // 5) Ask AI
+      askAIButton.addEventListener('click', async () => {
+        // If we have no text, do nothing
         if (!userQuestion.trim()) {
-          alert('No question available. Please speak first!')
+          alert('No question available. Please speak or edit first!')
           return
         }
         console.log('Asking AI:', userQuestion)
