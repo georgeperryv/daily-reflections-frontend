@@ -2,53 +2,140 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Test Ping</title>
+    <title>AI Voice Prompt (Continuous Listening)</title>
   </head>
   <body>
-    <h1>Test Ping</h1>
-    <button id="ping-button">Ping Backend</button>
-    <p id="ping-result">Click the button to ping the backend.</p>
+    <h1>Ask AI with Continuous Voice Input</h1>
 
-    <button id="openai-button">Ping OpenAI</button>
-    <p id="openai-result">Click the button to test OpenAI reachability.</p>
+    <!-- Start and Stop buttons for continuous listening -->
+    <button id="start-recording">Start Recording</button>
+    <button id="stop-recording">Stop Recording</button>
+
+    <!-- Display recognized speech so far -->
+    <p>
+      <strong>Question (Continuously Updated):</strong>
+      <span id="recognized-text">Waiting for speech...</span>
+    </p>
+
+    <!-- Button to send question to AI -->
+    <button id="ask-ai">Ask AI</button>
+
+    <!-- Display AI answer -->
+    <p>
+      <strong>AI Answer:</strong>
+      <span id="ai-answer"></span>
+    </p>
 
     <script>
+      // Web Speech API setup
+      const SpeechRecognition =
+        window.SpeechRecognition || window.webkitSpeechRecognition
+      const recognition = new SpeechRecognition()
+
+      // Make it continuous so it doesn't stop after a single phrase
+      recognition.continuous = true
+      // Decide whether to show partial results (we'll keep them off for now)
+      recognition.interimResults = false
+      recognition.maxAlternatives = 1
+
+      // We'll store the full recognized text here
+      let userQuestion = ''
+      let isListening = false
+
+      // Triggered when speech recognition starts
+      recognition.onstart = function () {
+        console.log('Speech recognition started...')
+        document.getElementById('recognized-text').textContent = 'Listening...'
+      }
+
+      // Triggered when new speech is recognized (continuous mode can fire onresult multiple times)
+      recognition.onresult = function (event) {
+        // The result index is event.resultIndex; in continuous mode, results can accumulate
+        // We append each new recognized phrase to our userQuestion
+        const lastResultIndex = event.results.length - 1
+        const transcript = event.results[lastResultIndex][0].transcript
+
+        // Append the new text with a space
+        userQuestion += transcript + ' '
+        document.getElementById('recognized-text').textContent = userQuestion
+        console.log('Speech recognized:', transcript)
+      }
+
+      // If an error occurs
+      recognition.onerror = function (event) {
+        console.log('Speech recognition error:', event.error)
+        if (event.error === 'not-allowed') {
+          document.getElementById('recognized-text').textContent =
+            'Microphone access not allowed.'
+        } else {
+          document.getElementById('recognized-text').textContent =
+            'Error capturing speech.'
+        }
+      }
+
+      // Called when the recognition service ends. In continuous mode, this can happen if silence is detected.
+      // We'll auto-restart if we're still in "listening" mode, so it keeps going indefinitely until user stops.
+      recognition.onend = function () {
+        console.log('Speech recognition ended.')
+        if (isListening) {
+          console.log('Resuming speech recognition...')
+          recognition.start()
+        }
+      }
+
+      // Start recording (continuous)
       document
-        .getElementById('ping-button')
-        .addEventListener('click', async () => {
-          try {
-            const response = await fetch('http://localhost:3000/ping')
-            const data = await response.json()
-            document.getElementById(
-              'ping-result'
-            ).textContent = `Backend says: ${data.message}`
-            console.log('Backend ping response:', data)
-          } catch (error) {
-            document.getElementById(
-              'ping-result'
-            ).textContent = `Error: ${error}`
-            console.error('Ping error:', error)
+        .getElementById('start-recording')
+        .addEventListener('click', () => {
+          if (!isListening) {
+            isListening = true
+            userQuestion = '' // Reset on new start
+            recognition.start()
           }
         })
 
+      // Stop recording
       document
-        .getElementById('openai-button')
-        .addEventListener('click', async () => {
-          try {
-            const response = await fetch('http://localhost:3000/ping_openai')
-            const data = await response.json()
-            document.getElementById('openai-result').textContent =
-              data.status === 'success'
-                ? `OpenAI reachable! Models found: ${data.availableModels}`
-                : `OpenAI check failed: ${JSON.stringify(data)}`
-            console.log('OpenAI ping response:', data)
-          } catch (error) {
-            document.getElementById(
-              'openai-result'
-            ).textContent = `Error: ${error}`
-            console.error('OpenAI ping error:', error)
+        .getElementById('stop-recording')
+        .addEventListener('click', () => {
+          if (isListening) {
+            isListening = false
+            recognition.stop()
+            console.log('Stopped continuous listening.')
           }
         })
+
+      // Ask AI: send the question to the backend
+      document.getElementById('ask-ai').addEventListener('click', async () => {
+        if (!userQuestion.trim()) {
+          alert('No question available. Please speak first!')
+          return
+        }
+        console.log('Asking AI:', userQuestion)
+
+        try {
+          const response = await fetch('http://localhost:3000/askAI', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ question: userQuestion })
+          })
+
+          const data = await response.json()
+          if (response.ok) {
+            document.getElementById('ai-answer').textContent = data.answer
+          } else {
+            console.error('Error from server:', data.error)
+            document.getElementById('ai-answer').textContent =
+              'Error: ' + data.error
+          }
+        } catch (error) {
+          console.error('Error calling askAI:', error)
+          document.getElementById('ai-answer').textContent =
+            'Error fetching AI response.'
+        }
+      })
     </script>
   </body>
 </html>
