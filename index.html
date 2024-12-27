@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Test Ping</title>
+  </head>
+  <body>
+    <h1>Test Ping</h1>
+    <button id="ping-button">Ping Backend</button>
+    <p id="ping-result">Click the button to ping the backend.</p>
+
+    <button id="openai-button">Ping OpenAI</button>
+    <p id="openai-result">Click the button to test OpenAI reachability.</p>
+
+    <script>
+      document
+        .getElementById('ping-button')
+        .addEventListener('click', async () => {
+          try {
+            const response = await fetch('http://localhost:3000/ping')
+            const data = await response.json()
+            document.getElementById(
+              'ping-result'
+            ).textContent = `Backend says: ${data.message}`
+            console.log('Backend ping response:', data)
+          } catch (error) {
+            document.getElementById(
+              'ping-result'
+            ).textContent = `Error: ${error}`
+            console.error('Ping error:', error)
+          }
+        })
+
+      document
+        .getElementById('openai-button')
+        .addEventListener('click', async () => {
+          try {
+            const response = await fetch('http://localhost:3000/ping_openai')
+            const data = await response.json()
+            document.getElementById('openai-result').textContent =
+              data.status === 'success'
+                ? `OpenAI reachable! Models found: ${data.availableModels}`
+                : `OpenAI check failed: ${JSON.stringify(data)}`
+            console.log('OpenAI ping response:', data)
+          } catch (error) {
+            document.getElementById(
+              'openai-result'
+            ).textContent = `Error: ${error}`
+            console.error('OpenAI ping error:', error)
+          }
+        })
+    </script>
+  </body>
+</html>
