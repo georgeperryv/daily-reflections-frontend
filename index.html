@@ -2,78 +2,81 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>AI Voice Prompt (Continuous + Editable)</title>
+    <title>Voice Reflection (Continuous + Editable)</title>
   </head>
   <body>
-    <h1>Ask AI with Continuous Voice Input (Editable)</h1>
+    <h1>Record a Voice Reflection</h1>
 
-    <!-- Start and Stop buttons for continuous listening -->
-    <button id="start-recording">Start Recording</button>
-    <button id="stop-recording">Stop Recording</button>
+    <!-- Start/Stop buttons for continuous listening -->
+    <button id="start-recording">Start Recording Reflection</button>
+    <button id="stop-recording">Stop Recording Reflection</button>
 
     <!-- Display recognized speech so far -->
     <p>
-      <strong>Question (Continuously Updated):</strong><br />
+      <strong>Your Reflection (Continuously Updated):</strong><br />
       <span id="recognized-text">Waiting for speech...</span>
     </p>
 
     <!-- Button to edit the text -->
-    <button id="edit-text">Edit Text</button>
+    <button id="edit-text">Edit Reflection</button>
     <!-- Button to save the edit (done editing) -->
     <button id="save-edit" style="display: none">Done Editing</button>
 
-    <!-- Button to send question to AI -->
-    <button id="ask-ai" disabled>Ask AI</button>
+    <!-- Button to submit reflection to server -->
+    <button id="submit-reflection" disabled>Submit Reflection</button>
 
-    <!-- Display AI answer -->
+    <!-- Display Transcription from the server -->
     <p>
-      <strong>AI Answer:</strong><br />
-      <span id="ai-answer"></span>
+      <strong>Transcription:</strong><br />
+      <span id="transcription"></span>
     </p>
 
     <script>
-      // Web Speech API setup
+      /******************************************************
+       *  Continuous speech recognition with the Web Speech API
+       *  Then we submit the final reflection to the backend
+       *  for OpenAI processing, storing in SQLite, etc.
+       ******************************************************/
       const SpeechRecognition =
         window.SpeechRecognition || window.webkitSpeechRecognition
       const recognition = new SpeechRecognition()
 
-      // Make it continuous so it doesn't stop after a single phrase
       recognition.continuous = true
-      // No partial results for simplicity
       recognition.interimResults = false
       recognition.maxAlternatives = 1
 
-      let userQuestion = '' // Will store the recognized text
-      let isListening = false // To track if we are in continuous mode
-      let editing = false // To track if we are currently editing
+      let userReflection = ''
+      let isListening = false
+      let editing = false
 
       const recognizedTextElem = document.getElementById('recognized-text')
       const editTextButton = document.getElementById('edit-text')
       const saveEditButton = document.getElementById('save-edit')
-      const askAIButton = document.getElementById('ask-ai')
+      const submitReflectionButton =
+        document.getElementById('submit-reflection')
+      const transcriptionElem = document.getElementById('transcription')
 
-      // --------------- Speech Recognition Callbacks ---------------
+      // --- Speech Recognition Callbacks ---
 
-      recognition.onstart = function () {
+      recognition.onstart = () => {
         console.log('Speech recognition started...')
         recognizedTextElem.textContent = 'Listening...'
       }
 
-      recognition.onresult = function (event) {
-        const lastResultIndex = event.results.length - 1
-        const transcript = event.results[lastResultIndex][0].transcript
-        // Append each new recognized phrase
-        userQuestion += transcript + ' '
-        recognizedTextElem.textContent = userQuestion
-        console.log('Speech recognized:', transcript)
+      recognition.onresult = event => {
+        const lastIndex = event.results.length - 1
+        const transcript = event.results[lastIndex][0].transcript
+        userReflection += transcript + ' '
+        recognizedTextElem.textContent = userReflection
+        console.log('Reflection recognized:', transcript)
       }
 
-      recognition.onerror = function (event) {
+      recognition.onerror = event => {
         console.log('Speech recognition error:', event.error)
         recognizedTextElem.textContent = 'Error capturing speech.'
       }
 
-      recognition.onend = function () {
+      recognition.onend = () => {
         console.log('Speech recognition ended.')
         if (isListening) {
           console.log('Resuming speech recognition...')
@@ -81,16 +84,16 @@
         }
       }
 
-      // ---------------- Buttons ----------------
+      // --- Button Handlers ---
 
-      // 1) Start Recording (continuous)
+      // 1) Start Recording
       document
         .getElementById('start-recording')
         .addEventListener('click', () => {
           if (!isListening) {
             isListening = true
             editing = false
-            userQuestion = '' // reset on new start
+            userReflection = ''
             recognizedTextElem.textContent = 'Listening...'
             recognition.start()
           }
@@ -104,68 +107,74 @@
             isListening = false
             recognition.stop()
             console.log('Stopped continuous listening.')
-            // Once we stop, we can enable editing or direct ask
-            askAIButton.disabled = false
+            // After stopping, user can edit or submit
+            submitReflectionButton.disabled = false
           }
         })
 
-      // 3) Edit Text
+      // 3) Edit Reflection
       editTextButton.addEventListener('click', () => {
         if (!editing) {
           editing = true
-          // Turn recognized text into an editable text area
           const currentText = recognizedTextElem.textContent
           recognizedTextElem.innerHTML = `
           <textarea id="edit-area" rows="5" cols="50">${currentText.trim()}</textarea>
         `
           saveEditButton.style.display = 'inline-block'
-          askAIButton.disabled = true // disable asking until done editing
+          submitReflectionButton.disabled = true // can't submit while editing
         }
       })
 
-      // 4) Save Edit / Done Editing
+      // 4) Done Editing
       saveEditButton.addEventListener('click', () => {
         if (editing) {
           const editArea = document.getElementById('edit-area')
           const editedText = editArea.value.trim()
-          userQuestion = editedText
+          userReflection = editedText
           recognizedTextElem.textContent = editedText
           editing = false
           saveEditButton.style.display = 'none'
-          askAIButton.disabled = false // re-enable ask AI
+          submitReflectionButton.disabled = false // re-enable submission
         }
       })
 
-      // 5) Ask AI
-      askAIButton.addEventListener('click', async () => {
-        // If we have no text, do nothing
-        if (!userQuestion.trim()) {
-          alert('No question available. Please speak or edit first!')
+      // 5) Submit Reflection
+      submitReflectionButton.addEventListener('click', async () => {
+        if (!userReflection.trim()) {
+          alert('No reflection available. Please speak or edit first!')
           return
         }
-        console.log('Asking AI:', userQuestion)
+        console.log('Submitting Reflection:', userReflection)
 
         try {
-          const response = await fetch('http://localhost:3000/askAI', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ question: userQuestion })
-          })
+          const response = await fetch(
+            'http://localhost:3000/submitReflection',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reflection: userReflection })
+            }
+          )
 
           const data = await response.json()
           if (response.ok) {
-            document.getElementById('ai-answer').textContent = data.answer
+            // data = { transcription, reflectionId, title, createdAt }
+            transcriptionElem.textContent = data.transcription
+            console.log(
+              'Saved reflection ID:',
+              data.reflectionId,
+              '| Title:',
+              data.title,
+              '| Time:',
+              data.createdAt
+            )
           } else {
             console.error('Error from server:', data.error)
-            document.getElementById('ai-answer').textContent =
-              'Error: ' + data.error
+            transcriptionElem.textContent = 'Error: ' + data.error
           }
         } catch (error) {
-          console.error('Error calling askAI:', error)
-          document.getElementById('ai-answer').textContent =
-            'Error fetching AI response.'
+          console.error('Error submitting reflection:', error)
+          transcriptionElem.textContent = 'Error processing reflection.'
         }
       })
     </script>
